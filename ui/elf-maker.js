@@ -40,7 +40,8 @@ class ElfMaker extends LitElement {
         _error: { state: true },
         _done: { state: true },        // what just happened, for the line under the buttons
         _discarding: { state: true },
-        _repos: { state: true },       // the elf repos you can push to (undefined: loading, null: failed)
+        _repos: { state: true },
+        _installed: { state: true },   // the elves on this desk: [{name, title, repo, commit, version}]       // the elf repos you can push to (undefined: loading, null: failed)
     };
 
     static styles = [shared, markdownStyles, css`
@@ -69,7 +70,7 @@ class ElfMaker extends LitElement {
             color: var(--ink); text-decoration: none; }
         ul.makes a:hover { border-color: var(--accent); }
         ul.makes .what { grid-column: 1; font-size: 13.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        ul.makes .chip { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+        ul.makes .chips { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
         .back { font-size: 14px; }
         nav.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
         nav.tabs a { padding: 8px 14px; color: var(--muted); text-decoration: none; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; }
@@ -182,6 +183,7 @@ class ElfMaker extends LitElement {
                 await Promise.all(stuck.map(make => elf.act('settle', { make }).catch(() => {})));
                 return this._load();
             }
+            this._installed = await elf.installed().catch(() => []);
             const id = this._makeId;
             this._make = id ? this._makes.find(m => m.id === id) ?? null : null;
             const m = this._make;
@@ -274,7 +276,8 @@ class ElfMaker extends LitElement {
     _list(makes) {
         return html`<ul class="makes">${makes.map(m => html`<li><a class="panel" href="#" @click=${e => { e.preventDefault(); this._go(`make/${m.id}`); }}>
             <strong>${titleOf(m)}</strong>
-            <span class="chip ${STAGES[m.stage]?.[1] ?? ''}">${STAGES[m.stage]?.[0] ?? m.stage}</span>
+            <span class="chips"><span class="chip ${STAGES[m.stage]?.[1] ?? ''}">${STAGES[m.stage]?.[0] ?? m.stage}</span>${this._onDesk(m.repo)
+                ? html`<span class="chip ok">On your desk</span>` : ''}</span>
             <span class="what">${m.repo ? `${m.repo}, ` : ''}${m.updated ? `changed ${ago(new Date(m.updated))}` : ''}</span>
         </a></li>`)}</ul>`;
     }
@@ -296,7 +299,8 @@ class ElfMaker extends LitElement {
                 ${this._repos === undefined ? html`<div class="skeleton" style="height:6rem"></div>`
                     : this._repos === null ? html`<p class="error" role="alert">${this._reposError}</p>`
                     : others.length ? html`<ul class="makes">${others.map(r => html`<li class="panel other">
-                        <div><strong>${r.repo}</strong>${r.private ? html` <span class="chip">Private</span>` : ''}
+                        <div><strong>${r.repo}</strong>${r.private ? html` <span class="chip">Private</span>` : ''}${this._onDesk(r.repo)
+                            ? html` <span class="chip ok">On your desk</span>` : ''}
                             <span class="what">${r.description}</span></div>
                         <button class="sm" ?disabled=${!!this._busy} @click=${() => this._change(r.repo)}>
                             ${this._busy === `change:${r.repo}` ? spinner : ''}Ask for a change</button>
@@ -585,8 +589,28 @@ class ElfMaker extends LitElement {
             ${this._ask(m, 'change', 'Not right yet?', 'The card should say how many are new since yesterday, not in all.')}`;
     }
 
+    /** The elf from this repo on your desk, if it's there. */
+    _onDesk(repo) {
+        return (this._installed ?? []).find(e => (e.repo ?? '').toLowerCase() === (repo ?? '').toLowerCase()) ?? null;
+    }
+
+    async _remove(e) {
+        this._busy = 'remove';
+        this._error = null;
+        try {
+            await elf.removeElf(e.name);
+            this._done = `${e.title} is off your desk. Its settings stay, for if you add it again.`;
+            this._load();
+        } catch (err) {
+            if (!err.cancelled) this._error = err.message;
+        } finally {
+            this._busy = null;
+        }
+    }
+
     _published(m) {
         const v = (m.published ?? []).at(-1);
+        const desk = this._onDesk(m.repo);
         // Brought in from outside and not changed here yet: its version is GitHub's, not one published from here.
         const broughtIn = m.adopted && (m.published ?? []).length === 1;
         const own = m.repo && !m.repo.startsWith('House-elves/');
@@ -597,9 +621,16 @@ class ElfMaker extends LitElement {
                     : v?.version ? `Version ${v.version} is published` : 'Published'}</h2>
                 <p class="hint">On GitHub at <a href="https://github.com/${m.repo}" target="_blank" rel="noopener">${m.repo}</a>, at
                     <code>${short(v?.commit)}</code>${v?.at && !broughtIn ? `, ${ago(new Date(v.at))}` : ''}.
-                    ${m.adopted ? '' : 'Add it to your desk to try it; a later version shows as an update on its tab.'}</p>
+                    ${!desk ? (m.adopted ? 'It isn\'t on your desk.' : 'Add it to your desk to try it; a later version shows as an update on its tab.')
+                        : desk.commit === v?.commit ? `It's on your desk${desk.version ? ` (version ${desk.version})` : ''}.`
+                        : `Your desk has ${desk.version ? `version ${desk.version}` : 'an older version'}: update it to try this one.`}</p>
                 <div class="acts">
-                    <button class="primary" ?disabled=${!!this._busy} @click=${() => this._add(m)}>Add it to your desk</button>
+                    ${!desk ? html`<button class="primary" ?disabled=${!!this._busy} @click=${() => this._add(m)}>Add it to your desk</button>`
+                        : html`${desk.commit !== v?.commit ? html`<button class="primary" ?disabled=${!!this._busy} @click=${() => this._add(m)}>
+                                Update it on your desk</button>` : ''}
+                            <button ?disabled=${!!this._busy} @click=${() => elf.openElf(desk.name).catch(err => { this._error = err.message; })}>Open it</button>
+                            <button class="quiet danger" ?disabled=${!!this._busy} @click=${() => this._remove(desk)}>
+                                ${this._busy === 'remove' ? spinner : ''}Remove it from your desk</button>`}
                     ${own && isPublic && !m.shareIssue ? html`<button ?disabled=${!!this._busy} @click=${() => this._share(m)}>
                         ${this._busy === 'share' ? spinner : ''}Share with House Elves</button>` : ''}
                     ${m.shareIssue ? html`<a href=${m.shareIssue}>Your request to share it</a>` : ''}
