@@ -40,6 +40,7 @@ class ElfMaker extends LitElement {
         _error: { state: true },
         _done: { state: true },        // what just happened, for the line under the buttons
         _discarding: { state: true },
+        _repos: { state: true },       // the elf repos you can push to (undefined: loading, null: failed)
     };
 
     static styles = [shared, markdownStyles, css`
@@ -70,6 +71,13 @@ class ElfMaker extends LitElement {
         ul.makes .what { grid-column: 1; font-size: 13.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         ul.makes .chip { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
         .back { font-size: 14px; }
+        nav.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+        nav.tabs a { padding: 8px 14px; color: var(--muted); text-decoration: none; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+        nav.tabs a.on { color: var(--ink); border-bottom-color: var(--accent); }
+        nav.tabs a:hover { color: var(--ink); }
+        li.other { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; padding: 14px 18px; }
+        li.other > div { display: grid; gap: 2px; min-width: 0; flex: 1 1 20rem; }
+        .empty { color: var(--muted); padding: 16px 18px; margin: 0; }
         .head { display: grid; gap: 6px; }
         .meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13.5px; color: var(--muted); align-items: center; }
         .meta a { color: inherit; }
@@ -117,6 +125,7 @@ class ElfMaker extends LitElement {
         elf.act('info').then(i => { this._info = i; }).catch(() => { this._info = { canShareInOrg: false }; });
         this._offChange = elf.onChange(() => this._load());
         this._offRoute = elf.onRoute(r => this._moved(r));
+        this._arrive();
     }
 
     /** Somewhere else in the page: Back or a link (onRoute), or one of its own links (_go, which onRoute doesn't hear). */
@@ -128,6 +137,19 @@ class ElfMaker extends LitElement {
         this._error = null;
         this._discarding = false;
         this._load();
+        this._arrive();
+    }
+
+    /** What a place needs when you get there: Your elves lists your repos; change/<owner>/<name> (the + page's Change it) opens that elf. */
+    async _arrive() {
+        if (this._route === 'mine' && this._repos == null) this._loadRepos();
+        const repo = /^change\/([A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100})$/.exec(this._route)?.[1];
+        if (!repo) return;
+        const r = await this._act(`change:${repo}`, 'adopt', { repo });
+        if (r?.make) {
+            elf.go(`make/${r.make}`, { replace: true });
+            this._moved(`make/${r.make}`);
+        }
     }
 
     _go(route) {
@@ -212,20 +234,29 @@ class ElfMaker extends LitElement {
         if (r?.make) this._go(`make/${r.make}`);
     }
 
-    _home() {
-        const makes = this._makes ?? [];
-        return html`
-            <div class="page-top"><div>
+    /** The two screens' tabs: Create and Your elves. */
+    _tabs(active) {
+        const tab = (id, route, label) => html`<a href="#" role="tab" aria-selected=${active === id ? 'true' : 'false'}
+            class=${active === id ? 'on' : ''} @click=${e => { e.preventDefault(); this._go(route); }}>${label}</a>`;
+        return html`<div class="page-top"><div>
                 <h1>Elf Maker</h1>
-                <p class="sub">Say what you want an elf to do. Elf Maker works out how it would work, and you change what you
-                    want. Then it builds the elf in a repo of its own. You read every version before it's published, and you
-                    can ask for changes at any time.</p>
+                <p class="sub">Say what you want an elf to do, or what to change in one you have. Elf Maker works it out and
+                    builds it, and you read every version before it's published.</p>
             </div>${settingsButton(null, 'Elf Maker settings')}</div>
-            ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : ''}
+            <nav class="tabs" role="tablist" aria-label="Elf Maker">
+                ${tab('create', '', 'Create an elf')}${tab('mine', 'mine', 'Your elves')}
+            </nav>
+            ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : ''}`;
+    }
+
+    _create() {
+        const working = (this._makes ?? []).filter(m => !m.repo && ['proposing', 'proposed', 'failed'].includes(m.stage));
+        return html`
+            ${this._tabs('create')}
             <section class="panel card" aria-labelledby="new-h">
-                <h2 id="new-h">Create an elf</h2>
-                <label class="field">What should it do?
-                    <textarea id="describe" class="tall" placeholder="Every weekday morning, list the new issues in my repos that nobody has answered yet, oldest first, with a link to each."></textarea>
+                <h2 id="new-h">What should it do?</h2>
+                <label class="field"><span class="hint">Describe the job in your own words: what it reads, when, and what you want to see.</span>
+                    <textarea id="describe" class="tall" aria-label="What should it do?" placeholder="Every weekday morning, list the new issues in my repos that nobody has answered yet, oldest first, with a link to each."></textarea>
                 </label>
                 <div class="acts">
                     <button class="primary" ?disabled=${!!this._busy} @click=${this._propose}>
@@ -234,24 +265,69 @@ class ElfMaker extends LitElement {
                         a few minutes and only reads; nothing is made yet.</span>
                 </div>
             </section>
-            ${makes.length ? html`<section aria-labelledby="yours-h">
-                <h2 id="yours-h">Your elves</h2>
-                <ul class="makes">${makes.map(m => html`<li><a class="panel" href="#" @click=${e => { e.preventDefault(); this._go(`make/${m.id}`); }}>
-                    <strong>${titleOf(m)}</strong>
-                    <span class="chip ${STAGES[m.stage]?.[1] ?? ''}">${STAGES[m.stage]?.[0] ?? m.stage}</span>
-                    <span class="what">${m.repo ? `${m.repo}, ` : ''}${m.updated ? `changed ${ago(new Date(m.updated))}` : ''}</span>
-                </a></li>`)}</ul>
+            ${working.length ? html`<section aria-labelledby="working-h">
+                <h2 id="working-h">Not created yet</h2>
+                ${this._list(working)}
+            </section>` : ''}`;
+    }
+
+    _list(makes) {
+        return html`<ul class="makes">${makes.map(m => html`<li><a class="panel" href="#" @click=${e => { e.preventDefault(); this._go(`make/${m.id}`); }}>
+            <strong>${titleOf(m)}</strong>
+            <span class="chip ${STAGES[m.stage]?.[1] ?? ''}">${STAGES[m.stage]?.[0] ?? m.stage}</span>
+            <span class="what">${m.repo ? `${m.repo}, ` : ''}${m.updated ? `changed ${ago(new Date(m.updated))}` : ''}</span>
+        </a></li>`)}</ul>`;
+    }
+
+    /** Your elves: the ones made or changed here, and every other elf repo you can push to, to ask for a change. */
+    _mine() {
+        const makes = (this._makes ?? []).filter(m => m.repo);
+        const known = new Set(makes.map(m => m.repo.toLowerCase()));
+        const others = (this._repos ?? []).filter(r => !known.has(r.repo.toLowerCase()));
+        return html`
+            ${this._tabs('mine')}
+            ${makes.length ? html`<section aria-labelledby="made-h">
+                <h2 id="made-h">Made or changed here</h2>
+                ${this._list(makes)}
             </section>` : ''}
-            <section class="panel card" aria-labelledby="adopt-h">
-                <h2 id="adopt-h">Change an elf you already have</h2>
-                <label class="field">Its repo
-                    <input id="adopt" type="text" placeholder="you/release-notes" autocomplete="off" spellcheck="false">
-                    <span class="hint">Any elf repo you can push to. You ask for the change here, and read it before it's published.</span>
-                </label>
-                <div class="acts">
-                    <button ?disabled=${!!this._busy} @click=${this._adopt}>${this._busy === 'adopt' ? spinner : ''}Bring it in</button>
+            <section aria-labelledby="others-h">
+                <h2 id="others-h">${makes.length ? 'Your other elves' : 'Your elves'}</h2>
+                <p class="hint">Elf repos tagged house-elf, in your account or House-elves, that you can push to.</p>
+                ${this._repos === undefined ? html`<div class="skeleton" style="height:6rem"></div>`
+                    : this._repos === null ? html`<p class="error" role="alert">${this._reposError}</p>`
+                    : others.length ? html`<ul class="makes">${others.map(r => html`<li class="panel other">
+                        <div><strong>${r.repo}</strong>${r.private ? html` <span class="chip">Private</span>` : ''}
+                            <span class="what">${r.description}</span></div>
+                        <button class="sm" ?disabled=${!!this._busy} @click=${() => this._change(r.repo)}>
+                            ${this._busy === `change:${r.repo}` ? spinner : ''}Ask for a change</button>
+                    </li>`)}</ul>`
+                    : html`<p class="panel empty">${makes.length ? 'None besides the ones above.' : 'None yet. Create one, or bring one in below.'}</p>`}
+            </section>
+            <details>
+                <summary>Another repo</summary>
+                <div class="card" style="padding:12px 0 0">
+                    <label class="field">Its repo
+                        <input id="adopt" type="text" placeholder="you/release-notes" autocomplete="off" spellcheck="false">
+                        <span class="hint">An elf repo you can push to that isn't listed, such as one just tagged.</span>
+                    </label>
+                    <div class="acts"><button ?disabled=${!!this._busy} @click=${this._adopt}>${this._busy === 'adopt' ? spinner : ''}Bring it in</button></div>
                 </div>
-            </section>`;
+            </details>`;
+    }
+
+    /** An elf repo to change: its page here, brought in first if it's new to Elf Maker. */
+    async _change(repo) {
+        const r = await this._act(`change:${repo}`, 'adopt', { repo });
+        if (r?.make) this._go(`make/${r.make}`);
+    }
+
+    async _loadRepos() {
+        try {
+            this._repos = (await elf.act('repos')).repos ?? [];
+        } catch (e) {
+            this._repos = null;
+            this._reposError = `Couldn't list your elves on GitHub: ${e.message}`;
+        }
     }
 
     // ---- one elf ----
@@ -511,13 +587,16 @@ class ElfMaker extends LitElement {
 
     _published(m) {
         const v = (m.published ?? []).at(-1);
+        // Brought in from outside and not changed here yet: its version is GitHub's, not one published from here.
+        const broughtIn = m.adopted && (m.published ?? []).length === 1;
         const own = m.repo && !m.repo.startsWith('House-elves/');
         const isPublic = m.proposal?.where !== 'private';
         return html`
             <section class="panel card" aria-labelledby="pub-h">
-                <h2 id="pub-h">${v?.version ? `Version ${v.version} is published` : 'Published'}</h2>
+                <h2 id="pub-h">${broughtIn ? (v?.version ? `At version ${v.version}` : 'As it is on GitHub')
+                    : v?.version ? `Version ${v.version} is published` : 'Published'}</h2>
                 <p class="hint">On GitHub at <a href="https://github.com/${m.repo}" target="_blank" rel="noopener">${m.repo}</a>, at
-                    <code>${short(v?.commit)}</code>${v?.at ? `, ${ago(new Date(v.at))}` : ''}.
+                    <code>${short(v?.commit)}</code>${v?.at && !broughtIn ? `, ${ago(new Date(v.at))}` : ''}.
                     ${m.adopted ? '' : 'Add it to your desk to try it; a later version shows as an update on its tab.'}</p>
                 <div class="acts">
                     <button class="primary" ?disabled=${!!this._busy} @click=${() => this._add(m)}>Add it to your desk</button>
@@ -548,14 +627,15 @@ class ElfMaker extends LitElement {
         const r = await this._act('discard', 'discard', { make: m.id });
         if (r) {
             this._discarding = false;
-            this._go('');
+            this._repos = undefined;
+            this._go(m.repo ? 'mine' : '');
         }
     }
 
     _one(m) {
         const [stage, tone] = STAGES[m.stage] ?? [m.stage, ''];
         return html`
-            <a class="back" href="#" @click=${e => { e.preventDefault(); this._go(''); }}>All your elves</a>
+            <a class="back" href="#" @click=${e => { e.preventDefault(); this._go(m.repo ? 'mine' : ''); }}>${m.repo ? 'Your elves' : 'Create an elf'}</a>
             <div class="head">
                 <h1>${titleOf(m)}</h1>
                 <div class="meta">
@@ -579,7 +659,8 @@ class ElfMaker extends LitElement {
             </details>` : ''}
             ${['proposing', 'building'].includes(m.stage) ? '' : this._discarding
                 ? html`<div class="confirm" role="group" aria-label="Forget ${titleOf(m)}">
-                    Forget ${titleOf(m)} here?${m.repo ? ` Its repo stays on GitHub (${m.repo}): delete it there if you don't want it.` : ''}
+                    Forget ${titleOf(m)} here?${m.adopted ? ` Nothing changes on GitHub, and it stays under Your elves.`
+                        : m.repo ? ` Its repo stays on GitHub (${m.repo}): delete it there if you don't want it.` : ''}
                     <button class="sm danger" ?disabled=${!!this._busy} @click=${() => this._discard(m)}>Forget it</button>
                     <button class="sm quiet" @click=${() => { this._discarding = false; }}>Keep it</button></div>`
                 : html`<div class="acts"><button class="quiet sm" @click=${() => { this._discarding = true; }}>Forget it</button></div>`}`;
@@ -598,8 +679,10 @@ class ElfMaker extends LitElement {
         return html`<div class="page">
             ${!this._makes ? html`<div class="skeleton" style="height:40vh"></div>`
                 : id ? (this._make ? this._one(this._make) : html`<p class="panel card">That elf isn't here any more.
-                    <a href="#" @click=${e => { e.preventDefault(); this._go(''); }}>All your elves</a></p>`)
-                : this._home()}
+                    <a href="#" @click=${e => { e.preventDefault(); this._go('mine'); }}>Your elves</a></p>`)
+                : this._route.startsWith('change/') ? (this._error ? html`${this._tabs('mine')}`
+                    : html`<p class="panel card working"><span class="status">${spinner}Opening ${this._route.slice(7)}…</span></p>`)
+                : this._route === 'mine' ? this._mine() : this._create()}
         </div>`;
     }
 }

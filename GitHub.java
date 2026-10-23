@@ -136,6 +136,35 @@ public class GitHub {
         return a.body().path("html_url").asText();
     }
 
+    /**
+     * The elf repos you can change: tagged house-elf, in your account or House-elves, that you can push to (search
+     * lists a just-tagged repo a few minutes late). [{repo, description, private, url}], Elf Maker and the template left out.
+     */
+    java.util.List<com.fasterxml.jackson.databind.node.ObjectNode> elfRepos() throws IOException {
+        var query = JSON.createObjectNode();
+        query.put("query", """
+                query($mine: String!, $pub: String!) {
+                  mine: search(query: $mine, type: REPOSITORY, first: 100) { nodes { ...elf } }
+                  pub: search(query: $pub, type: REPOSITORY, first: 100) { nodes { ...elf } }
+                }
+                fragment elf on Repository { nameWithOwner description isPrivate url isArchived viewerPermission }""");
+        query.putObject("variables").put("mine", "topic:house-elf user:" + login + " archived:false")
+                .put("pub", "topic:house-elf org:" + ORG + " archived:false");
+        Answer a = call("POST", "/graphql", query);
+        if (!a.ok() || a.body().has("errors")) throw new IOException("GitHub didn't list your elves: " + a.body().path("errors").path(0).path("message").asText(a.message()));
+        java.util.Map<String, com.fasterxml.jackson.databind.node.ObjectNode> out = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (String list : java.util.List.of("mine", "pub")) {
+            for (JsonNode n : a.body().path("data").path(list).path("nodes")) {
+                String repo = n.path("nameWithOwner").asText("");
+                if (!REPO.matcher(repo).matches() || repo.equals(TEMPLATE) || repo.equals(ORG + "/elf-maker")) continue;
+                if (!java.util.Set.of("ADMIN", "MAINTAIN", "WRITE").contains(n.path("viewerPermission").asText())) continue;
+                out.put(repo, JSON.createObjectNode().put("repo", repo).put("description", n.path("description").asText(""))
+                        .put("private", n.path("isPrivate").asBoolean()).put("url", n.path("url").asText("")));
+            }
+        }
+        return new java.util.ArrayList<>(out.values());
+    }
+
     /** The elf.yaml at the repo's default branch, or null. */
     String elfYaml(String repo) throws IOException {
         Answer a = get("/repos/" + repo + "/contents/elf.yaml");

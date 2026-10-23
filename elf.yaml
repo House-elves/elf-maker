@@ -99,6 +99,10 @@ actions:
     args: [--action=share]
     params:
       make: {pattern: "[0-9]{8}-[0-9]{6}"}
+  repos:
+    label: List the elves you can change
+    args: [--action=repos]
+    ask: false
   adopt:
     label: Change an elf you already have
     args: [--action=adopt]

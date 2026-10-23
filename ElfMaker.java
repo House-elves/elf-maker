@@ -89,6 +89,7 @@ public class ElfMaker implements Callable<Integer> {
                 case "discard" -> discard(in);
                 case "settle" -> settle(in);
                 case "recheck" -> recheck(in);
+                case "repos" -> repos();
                 default -> throw new IllegalArgumentException("Not an action: " + action);
             };
             // The last line printed is the action's answer to the tab.
@@ -536,6 +537,14 @@ public class ElfMaker implements Callable<Integer> {
         log(m, "Brought in " + repo + " to change");
         save(m);
         return JSON.createObjectNode().put("make", id);
+    }
+
+    /** Every elf repo you can change, whether it was made here or not: {repos: [{repo, description, private, url}]}. */
+    ObjectNode repos() throws IOException {
+        ObjectNode out = JSON.createObjectNode();
+        var list = out.putArray("repos");
+        new GitHub(login()).elfRepos().forEach(list::add);
+        return out;
     }
 
     /** Forgets it here. Its repo on GitHub, if it has one, stays: deleting a repo is yours to do. */
