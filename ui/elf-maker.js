@@ -251,7 +251,7 @@ class ElfMaker extends LitElement {
             ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : ''}`;
     }
 
-    _create() {
+    _createPage() {
         const working = (this._makes ?? []).filter(m => !m.repo && ['proposing', 'proposed', 'failed'].includes(m.stage));
         return html`
             ${this._tabs('create')}
@@ -713,7 +713,7 @@ class ElfMaker extends LitElement {
                     <a href="#" @click=${e => { e.preventDefault(); this._go('mine'); }}>Your elves</a></p>`)
                 : this._route.startsWith('change/') ? (this._error ? html`${this._tabs('mine')}`
                     : html`<p class="panel card working"><span class="status">${spinner}Opening ${this._route.slice(7)}…</span></p>`)
-                : this._route === 'mine' ? this._mine() : this._create()}
+                : this._route === 'mine' ? this._mine() : this._createPage()}
         </div>`;
     }
 }
