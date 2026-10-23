@@ -648,7 +648,7 @@ class ElfMaker extends LitElement {
                     its code and add it to their desk, and you can ask House Elves to share it. Elf Maker checks it and its
                     history for tokens and keys first.</p>` : ''}
                 ${own && isPublic && canMove ? html`<p class="hint">You may create repos in House-elves, so you can move it there
-                    yourself: it's listed for everyone, and GitHub forwards its old address.${m.shareIssue ? ' Your request to share it is closed with a note.' : ''}</p>` : ''}
+                    yourself: it's listed for everyone, and GitHub forwards its old address.${m.shareIssue ? ' Moving it closes your request to share it, with a note.' : ''}</p>` : ''}
                 ${fromOld ? html`<p class="hint">Your desk still has it from ${m.movedFrom}. Switch it to ${m.repo}: it's taken
                     off and added again from there, and its settings stay.</p>
                     <div class="acts"><button ?disabled=${!!this._busy} @click=${() => this._switch(m, desk)}>
