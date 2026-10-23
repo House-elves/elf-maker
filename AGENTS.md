@@ -12,6 +12,7 @@ Elf Maker is an elf like any other, and follows the guide in
 - **Nothing reaches GitHub without a click you confirm:** `create`, `publish`, `make-public` and `share` ask first. `published` only
   finishes a publish you confirmed: it checks the pushed commit is on GitHub before it tags the repo or makes it public.
   `make-public` makes a published private elf public only after the runner's check on it and a look through its
-  whole history for tokens and keys (`Check.beforePublic`), since a public repo shows its history too.
+  whole history (every branch, tag and pull request ref) for tokens and keys (`Check.beforePublic`), since a public
+  repo shows all of them; if anything is pushed while it looks, the repo stays private.
 - **The proposal agent** is read-only, on the public template, with web access (`web: true`, runner 0.38.0).
   **The build agent** gets the approved proposal as `untrusted` too, so the runner's safety check reads it first.

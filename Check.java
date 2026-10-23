@@ -5,6 +5,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -55,23 +57,22 @@ public class Check {
             + "|xox[abpr]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|-----BEGIN [A-Z ]*PRIVATE KEY-----");
 
     /**
-     * Before a private repo is made public: the runner's check on what's there now, and every commit in its history
-     * read for a token or a key, since a public repo shows its history too.
+     * Before a private repo is made public: the runner's check on what's there now, and every commit any of its refs
+     * reaches (branches, tags and pull requests: a public repo shows them all) read for a token or a key. If anything
+     * was pushed while it looked, it says so, and the repo stays private.
      */
     static Result beforePublic(String token, String repo) throws IOException {
         Path dir = Files.createTempDirectory("elf-maker-public-");
         try {
-            Path wt = dir.resolve("elf");
-            git(dir, token, null, "clone", "--quiet", "https://github.com/" + repo + ".git", wt.toString());
-            for (String line : exec(List.of("git", "ls-files", "-s"), wt, null, null, 60).out().split("\n")) {
-                if (line.startsWith("120000 ") || line.startsWith("160000 ")) {
-                    return new Result(false, "It has a symlink or a submodule (" + line.substring(line.indexOf('\t') + 1) + ").");
-                }
-            }
-            // Every change of every branch, with the commit it's in: what anyone could read once it's public.
+            String url = "https://github.com/" + repo + ".git";
+            Path mirror = dir.resolve("history.git");
+            git(dir, token, null, "clone", "--quiet", "--mirror", url, mirror.toString());
+            Set<String> seen = refs(exec(List.of("git", "--git-dir=" + mirror, "show-ref"), dir, null, null, 60).out());
+            // Every change in every ref, with the commit it's in: what anyone could read once it's public.
             Path log = dir.resolve("history.txt");
-            ProcessBuilder pb = new ProcessBuilder("git", "-c", "core.hooksPath=/dev/null", "log", "--all", "-p", "--no-color",
-                    "--no-ext-diff", "--format=commit %h").directory(wt.toFile()).redirectErrorStream(true).redirectOutput(log.toFile());
+            ProcessBuilder pb = new ProcessBuilder("git", "--git-dir=" + mirror, "-c", "core.hooksPath=/dev/null", "log", "--all",
+                    "-p", "--no-color", "--no-ext-diff", "--format=commit %h").directory(dir.toFile()).redirectErrorStream(true)
+                    .redirectOutput(log.toFile());
             pb.environment().put("GIT_TERMINAL_PROMPT", "0");
             try {
                 Process p = pb.start();
@@ -89,10 +90,17 @@ public class Check {
                 for (String line : (Iterable<String>) lines::iterator) {
                     if (line.startsWith("commit ")) commit = line.substring(7);
                     else if (line.startsWith("+") && LEAK.matcher(line).find()) {
-                        return new Result(false, "Commit " + commit + " has what looks like a token or key. Its history would be "
-                                + "public too, so it stays private: take the key out of the repo's history on GitHub first, and "
-                                + "revoke it.");
+                        return new Result(false, "Commit " + commit + " has what looks like a token or key, so it stays private. "
+                                + "Revoke that key now: it has been in the repo, even if it's gone from the latest version. "
+                                + "Taking it out of the history doesn't make it safe, since clones and forks may have it.");
                     }
+                }
+            }
+            Path wt = dir.resolve("elf");
+            git(dir, null, null, "clone", "--quiet", mirror.toString(), wt.toString());
+            for (String line : exec(List.of("git", "ls-files", "-s"), wt, null, null, 60).out().split("\n")) {
+                if (line.startsWith("120000 ") || line.startsWith("160000 ")) {
+                    return new Result(false, "It has a symlink or a submodule (" + line.substring(line.indexOf('\t') + 1) + ").");
                 }
             }
             Path jar = DATA.resolve("app").resolve("elf-runner.jar");
@@ -102,23 +110,48 @@ public class Check {
             if (o.out().contains("Connected to") || o.out().contains("Can't reach the desk")) {
                 return new Result(false, "The runner is too old to check an elf: update it with house-elves install.");
             }
-            return new Result(o.exit() == 0, o.out().strip());
+            if (o.exit() != 0) return new Result(false, o.out().strip());
+            // What it checked is still all there is.
+            Set<String> now = refs(gitOut(dir, token, "ls-remote", url).out());
+            if (!now.equals(seen)) return new Result(false, "Something was pushed to it while it was being checked: try again.");
+            return new Result(true, o.out().strip());
         } finally {
             delete(dir);
         }
+    }
+
+    /** "commit ref" lines (show-ref, ls-remote) as a set, without HEAD and peeled tags. */
+    static Set<String> refs(String out) {
+        Set<String> refs = new TreeSet<>();
+        for (String line : out.split("\n")) {
+            String[] f = line.strip().split("\\s+");
+            if (f.length == 2 && !f[1].equals("HEAD") && !f[1].endsWith("^{}")) refs.add(f[0] + " " + f[1]);
+        }
+        return refs;
     }
 
     record Out(int exit, String out) {
     }
 
     static void git(Path dir, String token, String stdin, String... args) throws IOException {
+        Out o = gitRun(dir, token, stdin, args);
+        if (o.exit() != 0) throw new IOException("git " + args[0] + " failed: " + o.out().strip());
+    }
+
+    /** Its output, for a git command that reads. */
+    static Out gitOut(Path dir, String token, String... args) throws IOException {
+        Out o = gitRun(dir, token, null, args);
+        if (o.exit() != 0) throw new IOException("git " + args[0] + " failed: " + o.out().strip());
+        return o;
+    }
+
+    static Out gitRun(Path dir, String token, String stdin, String[] args) throws IOException {
         List<String> cmd = new ArrayList<>(List.of("git", "-c", "core.hooksPath=/dev/null", "-c", "credential.helper="));
         if (token != null) {
             cmd.addAll(List.of("-c", "credential.helper=!f() { echo username=x-access-token; echo \"password=$ELF_MAKER_TOKEN\"; }; f"));
         }
         cmd.addAll(List.of(args));
-        Out o = exec(cmd, dir, token, stdin, 180);
-        if (o.exit() != 0) throw new IOException("git " + args[0] + " failed: " + o.out().strip());
+        return exec(cmd, dir, token, stdin, 180);
     }
 
     static Out exec(List<String> cmd, Path dir, String token, String stdin, int seconds) throws IOException {
