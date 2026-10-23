@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 /**
  * The runner's --check-elf, on the version the agent made, before you read it: a fresh clone of the elf's repo at
@@ -34,6 +35,64 @@ public class Check {
                 if (line.startsWith("120000 ") || line.startsWith("160000 ")) {
                     return new Result(false, "It has a symlink or a submodule (" + line.substring(line.indexOf('\t') + 1)
                             + "): an elf is plain files. Ask for a change that removes it.");
+                }
+            }
+            Path jar = DATA.resolve("app").resolve("elf-runner.jar");
+            if (!Files.isRegularFile(jar)) return new Result(false, "The runner isn't installed here, so the elf couldn't be checked.");
+            String java = ProcessHandle.current().info().command().orElse("java");
+            Out o = exec(List.of(java, "-jar", jar.toString(), "--check-elf", wt.toString()), dir, null, null, 120);
+            if (o.out().contains("Connected to") || o.out().contains("Can't reach the desk")) {
+                return new Result(false, "The runner is too old to check an elf: update it with house-elves install.");
+            }
+            return new Result(o.exit() == 0, o.out().strip());
+        } finally {
+            delete(dir);
+        }
+    }
+
+    /** What the runner's check finds in a token or a key; the same as its own (Elves.LEAK). */
+    static final Pattern LEAK = Pattern.compile("gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|sk-ant-[A-Za-z0-9_-]{20,}"
+            + "|xox[abpr]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|-----BEGIN [A-Z ]*PRIVATE KEY-----");
+
+    /**
+     * Before a private repo is made public: the runner's check on what's there now, and every commit in its history
+     * read for a token or a key, since a public repo shows its history too.
+     */
+    static Result beforePublic(String token, String repo) throws IOException {
+        Path dir = Files.createTempDirectory("elf-maker-public-");
+        try {
+            Path wt = dir.resolve("elf");
+            git(dir, token, null, "clone", "--quiet", "https://github.com/" + repo + ".git", wt.toString());
+            for (String line : exec(List.of("git", "ls-files", "-s"), wt, null, null, 60).out().split("\n")) {
+                if (line.startsWith("120000 ") || line.startsWith("160000 ")) {
+                    return new Result(false, "It has a symlink or a submodule (" + line.substring(line.indexOf('\t') + 1) + ").");
+                }
+            }
+            // Every change of every branch, with the commit it's in: what anyone could read once it's public.
+            Path log = dir.resolve("history.txt");
+            ProcessBuilder pb = new ProcessBuilder("git", "-c", "core.hooksPath=/dev/null", "log", "--all", "-p", "--no-color",
+                    "--no-ext-diff", "--format=commit %h").directory(wt.toFile()).redirectErrorStream(true).redirectOutput(log.toFile());
+            pb.environment().put("GIT_TERMINAL_PROMPT", "0");
+            try {
+                Process p = pb.start();
+                if (!p.waitFor(120, TimeUnit.SECONDS)) {
+                    p.destroyForcibly();
+                    throw new IOException("Reading its history took too long");
+                }
+                if (p.exitValue() != 0) throw new IOException("Couldn't read its history");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException(e);
+            }
+            String commit = "";
+            try (var lines = Files.lines(log, StandardCharsets.UTF_8)) {
+                for (String line : (Iterable<String>) lines::iterator) {
+                    if (line.startsWith("commit ")) commit = line.substring(7);
+                    else if (line.startsWith("+") && LEAK.matcher(line).find()) {
+                        return new Result(false, "Commit " + commit + " has what looks like a token or key. Its history would be "
+                                + "public too, so it stays private: take the key out of the repo's history on GitHub first, and "
+                                + "revoke it.");
+                    }
                 }
             }
             Path jar = DATA.resolve("app").resolve("elf-runner.jar");

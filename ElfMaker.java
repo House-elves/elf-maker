@@ -85,6 +85,7 @@ public class ElfMaker implements Callable<Integer> {
                 case "publish" -> publish(in);
                 case "published" -> published(in);
                 case "share" -> share(in);
+                case "make-public" -> makePublic(in);
                 case "adopt" -> adopt(in);
                 case "discard" -> discard(in);
                 case "settle" -> settle(in);
@@ -475,6 +476,28 @@ public class ElfMaker implements Callable<Integer> {
         log(m, "Published " + (version.isEmpty() ? commit.substring(0, 7) : "version " + version) + (wantsPublic ? ", public" : ""));
         save(m);
         return JSON.createObjectNode().put("make", m.path("id").asText()).put("repo", repo).put("commit", commit).set("version", v);
+    }
+
+    /**
+     * Makes a published private elf public, in the account it's in: after the runner's check on what's there and a
+     * look through its whole history for a token or a key, since that turns public too.
+     */
+    ObjectNode makePublic(JsonNode in) throws IOException {
+        ObjectNode m = load(in.path("make").asText(""));
+        String repo = m.path("repo").asText("");
+        GitHub gh = new GitHub(login());
+        JsonNode r = repo.isEmpty() ? null : gh.repo(repo);
+        if (!m.path("stage").asText().equals("published") || r == null) throw new IllegalStateException("Publish it first");
+        if (r.path("private").asBoolean()) {
+            if (!r.path("permissions").path("admin").asBoolean(false)) throw new IllegalStateException("Only an admin of " + repo + " can make it public");
+            Check.Result c = Check.beforePublic(gh.token, repo);
+            if (!c.ok()) throw new IllegalStateException("It stays private: " + Proposal.clip(c.out(), 600));
+            gh.makePublic(repo);
+            log(m, "Made it public");
+        }
+        if (m.path("proposal") instanceof ObjectNode p) p.put("where", "public");
+        save(m);
+        return JSON.createObjectNode().put("make", m.path("id").asText()).put("repo", repo).put("public", true);
     }
 
     /** Share: an issue in House-elves/house-elves asking for the elf to be shared there. */

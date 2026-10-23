@@ -1,6 +1,6 @@
 // Elf Maker's page on Elf Desk, opened from the + page: describe an elf, change what the agent works out, create it,
 // read each version before it's published, and ask for changes. Every step that reaches GitHub is a click the desk
-// asks you to confirm (Create, Publish, Share).
+// asks you to confirm (Create, Publish, Make it public, Share).
 import {
     LitElement, html, css, shared, markdown, markdownStyles, spinner, ago, calendarText, settingsButton, Ticking, elf,
 } from '/elf-kit/1/kit.js';
@@ -633,10 +633,15 @@ class ElfMaker extends LitElement {
                             <button ?disabled=${!!this._busy} @click=${() => elf.openElf(desk.name).catch(err => { this._error = err.message; })}>Open it</button>
                             <button class="quiet danger" ?disabled=${!!this._busy} @click=${() => this._remove(desk)}>
                                 ${this._busy === 'remove' ? spinner : ''}Remove it from your desk</button>`}
+                    ${!isPublic ? html`<button ?disabled=${!!this._busy} @click=${() => this._makePublic(m)}>
+                        ${this._busy === 'make-public' ? spinner : ''}Make it public</button>` : ''}
                     ${own && isPublic && !m.shareIssue ? html`<button ?disabled=${!!this._busy} @click=${() => this._share(m)}>
                         ${this._busy === 'share' ? spinner : ''}Share with House Elves</button>` : ''}
                     ${m.shareIssue ? html`<a href=${m.shareIssue}>Your request to share it</a>` : ''}
                 </div>
+                ${!isPublic ? html`<p class="hint">It's private: only you can see it and add it. Made public, anyone can read
+                    its code and add it to their desk, and you can ask House Elves to share it. Elf Maker checks it and its
+                    history for tokens and keys first.</p>` : ''}
                 ${own && isPublic && !m.shareIssue ? html`<p class="hint">Sharing opens an issue in House-elves/house-elves. If
                     they take it, the repo moves there and the elf is listed for everyone.</p>` : ''}
             </section>
@@ -648,6 +653,15 @@ class ElfMaker extends LitElement {
             await elf.addElf(m.repo);
         } catch (e) {
             this._error = e.message;
+        }
+    }
+
+    async _makePublic(m) {
+        const r = await this._act('make-public', 'make-public', { make: m.id });
+        if (r?.public) {
+            this._repos = undefined;
+            this._done = `${m.repo} is public.`;
+            this._load();
         }
     }
 

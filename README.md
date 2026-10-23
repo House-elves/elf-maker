@@ -18,13 +18,16 @@ desk's **+** page.
 5. **Change it any time.** Ask for a change and the agent makes a new version, which you read and publish the same way.
    Your desk then offers it as an update. **Change an elf you already have** works for any elf repo you can push to.
 
-A public elf in your account can be shared: **Share with House Elves** opens an issue in
+A private elf can be made public later: **Make it public** on its page checks it and its whole history for tokens
+and keys, then makes its repo public, so anyone can read it and add it. A public elf in your account can be shared:
+**Share with House Elves** opens an issue in
 [House-elves/house-elves](https://github.com/House-elves/house-elves). If they take it, the repo moves there.
 
 - **Reads:** what you ask for. The proposal agent can only read the template and the web. The build agent works in a
   clone of the elf's repo, in the runner's sandbox, with no GitHub credentials.
 - **Writes:** only on a click you confirm. **Create** makes a private repo, **Publish** pushes the version you read
-  (and makes the repo public if you chose that), and **Share** opens the issue.
+  (and makes the repo public if you chose that), **Make it public** makes a private one public, and **Share** opens the
+  issue.
 
 Its state is in `~/.config/elf-maker/makes/`, one file per elf, and the agents' reports in `~/.config/elf-maker/agents/`.
 It needs the runner 0.5.9 or later.
