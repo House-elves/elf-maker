@@ -19,6 +19,7 @@ writes:
   - When you click Publish and confirm, the version you read, pushed to that repo, and the repo made public if you chose that.
   - When you click Make it public and confirm, a private elf's repo made public on GitHub, after the runner's check and a look through its history for tokens and keys.
   - When you click Share and confirm, an issue in House-elves/house-elves asking to share your elf.
+  - When you click Move it into House-elves and confirm (if you may create repos there), your public elf's repo moved into House-elves, and your request to share it commented on and closed.
 
 settings:
   - key: GITHUB_USER
@@ -98,6 +99,12 @@ actions:
     label: Make it public
     confirm: Make this elf's repo public on GitHub? Anyone can then read its code and its history, and add it to their desk. Elf Maker checks it and its history for tokens and keys first.
     args: [--action=make-public]
+    params:
+      make: {pattern: "[0-9]{8}-[0-9]{6}"}
+  move:
+    label: Move it into House-elves
+    confirm: Move this elf's repo into House-elves on GitHub? It becomes House-elves' repo, and GitHub forwards its old address to it. If you asked to share it, that issue gets a note and is closed.
+    args: [--action=move]
     params:
       make: {pattern: "[0-9]{8}-[0-9]{6}"}
   share:

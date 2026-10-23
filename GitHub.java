@@ -129,6 +129,23 @@ public class GitHub {
         if (!a.ok()) throw new IOException("Couldn't make " + repo + " public: " + a.message());
     }
 
+    /**
+     * Moves the repo to {@code owner} (an org you may create repos in: GitHub then moves it at once). Its old address
+     * forwards to the new one.
+     */
+    void transfer(String repo, String owner) throws IOException {
+        Answer a = call("POST", "/repos/" + repo + "/transfer", JSON.createObjectNode().put("new_owner", owner));
+        if (!a.ok()) throw new IOException("GitHub didn't move " + repo + ": " + a.message());
+    }
+
+    /** Comments on an issue, then closes it. */
+    void closeWith(String repo, int number, String comment) throws IOException {
+        Answer c = call("POST", "/repos/" + repo + "/issues/" + number + "/comments", JSON.createObjectNode().put("body", comment));
+        if (!c.ok()) throw new IOException("Couldn't comment on " + repo + "#" + number + ": " + c.message());
+        Answer a = call("PATCH", "/repos/" + repo + "/issues/" + number, JSON.createObjectNode().put("state", "closed"));
+        if (!a.ok()) throw new IOException("Couldn't close " + repo + "#" + number + ": " + a.message());
+    }
+
     /** Opens the issue; its URL. */
     String issue(String repo, String title, String body) throws IOException {
         Answer a = call("POST", "/repos/" + repo + "/issues", JSON.createObjectNode().put("title", title).put("body", body));

@@ -21,13 +21,16 @@ desk's **+** page.
 A private elf can be made public later: **Make it public** on its page checks it and its whole history for tokens
 and keys, then makes its repo public, so anyone can read it and add it. A public elf in your account can be shared:
 **Share with House Elves** opens an issue in
-[House-elves/house-elves](https://github.com/House-elves/house-elves). If they take it, the repo moves there.
+[House-elves/house-elves](https://github.com/House-elves/house-elves). If they take it, an owner lets you create repos
+there, and **Move it into House-elves** moves your repo in (GitHub forwards its old address) and closes the issue.
+If you can create repos there already, the button is there from the start. **Switch it** then moves the copy on your
+desk to the new repo, keeping its settings.
 
 - **Reads:** what you ask for. The proposal agent can only read the template and the web. The build agent works in a
   clone of the elf's repo, in the runner's sandbox, with no GitHub credentials.
 - **Writes:** only on a click you confirm. **Create** makes a private repo, **Publish** pushes the version you read
-  (and makes the repo public if you chose that), **Make it public** makes a private one public, and **Share** opens the
-  issue.
+  (and makes the repo public if you chose that), **Make it public** makes a private one public, **Share** opens the issue,
+  and **Move it into House-elves** moves the repo there.
 
 Its state is in `~/.config/elf-maker/makes/`, one file per elf, and the agents' reports in `~/.config/elf-maker/agents/`.
 It needs the runner 0.5.9 or later.

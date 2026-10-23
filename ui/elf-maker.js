@@ -1,6 +1,6 @@
 // Elf Maker's page on Elf Desk, opened from the + page: describe an elf, change what the agent works out, create it,
 // read each version before it's published, and ask for changes. Every step that reaches GitHub is a click the desk
-// asks you to confirm (Create, Publish, Make it public, Share).
+// asks you to confirm (Create, Publish, Make it public, Share, Move).
 import {
     LitElement, html, css, shared, markdown, markdownStyles, spinner, ago, calendarText, settingsButton, Ticking, elf,
 } from '/elf-kit/1/kit.js';
@@ -612,7 +612,10 @@ class ElfMaker extends LitElement {
 
     _published(m) {
         const v = (m.published ?? []).at(-1);
-        const desk = this._onDesk(m.repo);
+        // Moved into House-elves: your desk may still have it from its old place (GitHub forwards it).
+        const desk = this._onDesk(m.repo) ?? (m.movedFrom ? this._onDesk(m.movedFrom) : null);
+        const fromOld = !!desk && !!m.movedFrom && !this._onDesk(m.repo);
+        const canMove = this._info?.canShareInOrg;
         // Brought in from outside and not changed here yet: its version is GitHub's, not one published from here.
         const broughtIn = m.adopted && (m.published ?? []).length === 1;
         const own = m.repo && !m.repo.startsWith('House-elves/');
@@ -628,22 +631,30 @@ class ElfMaker extends LitElement {
                         : `Your desk has ${desk.version ? `version ${desk.version}` : 'an older version'}: update it to try this one.`}</p>
                 <div class="acts">
                     ${!desk ? html`<button class="primary" ?disabled=${!!this._busy} @click=${() => this._add(m)}>Add it to your desk</button>`
-                        : html`${desk.commit !== v?.commit ? html`<button class="primary" ?disabled=${!!this._busy} @click=${() => this._add(m)}>
+                        : html`${desk.commit !== v?.commit && !fromOld ? html`<button class="primary" ?disabled=${!!this._busy} @click=${() => this._add(m)}>
                                 Update it on your desk</button>` : ''}
                             <button ?disabled=${!!this._busy} @click=${() => elf.openElf(desk.name).catch(err => { this._error = err.message; })}>Open it</button>
                             <button class="quiet danger" ?disabled=${!!this._busy} @click=${() => this._remove(desk)}>
                                 ${this._busy === 'remove' ? spinner : ''}Remove it from your desk</button>`}
                     ${!isPublic ? html`<button ?disabled=${!!this._busy} @click=${() => this._makePublic(m)}>
                         ${this._busy === 'make-public' ? spinner : ''}Make it public</button>` : ''}
-                    ${own && isPublic && !m.shareIssue ? html`<button ?disabled=${!!this._busy} @click=${() => this._share(m)}>
+                    ${own && isPublic && canMove ? html`<button ?disabled=${!!this._busy} @click=${() => this._move(m)}>
+                        ${this._busy === 'move' ? spinner : ''}Move it into House-elves</button>` : ''}
+                    ${own && isPublic && !canMove && !m.shareIssue ? html`<button ?disabled=${!!this._busy} @click=${() => this._share(m)}>
                         ${this._busy === 'share' ? spinner : ''}Share with House Elves</button>` : ''}
                     ${m.shareIssue ? html`<a href=${m.shareIssue}>Your request to share it</a>` : ''}
                 </div>
                 ${!isPublic ? html`<p class="hint">It's private: only you can see it and add it. Made public, anyone can read
                     its code and add it to their desk, and you can ask House Elves to share it. Elf Maker checks it and its
                     history for tokens and keys first.</p>` : ''}
-                ${own && isPublic && !m.shareIssue ? html`<p class="hint">Sharing opens an issue in House-elves/house-elves. If
-                    they take it, the repo moves there and the elf is listed for everyone.</p>` : ''}
+                ${own && isPublic && canMove ? html`<p class="hint">You may create repos in House-elves, so you can move it there
+                    yourself: it's listed for everyone, and GitHub forwards its old address.${m.shareIssue ? ' Your request to share it is closed with a note.' : ''}</p>` : ''}
+                ${fromOld ? html`<p class="hint">Your desk still has it from ${m.movedFrom}. Switch it to ${m.repo}: it's taken
+                    off and added again from there, and its settings stay.</p>
+                    <div class="acts"><button ?disabled=${!!this._busy} @click=${() => this._switch(m, desk)}>
+                        ${this._busy === 'switch' ? spinner : ''}Switch it</button></div>` : ''}
+                ${own && isPublic && !canMove && !m.shareIssue ? html`<p class="hint">Sharing opens an issue in House-elves/house-elves. If
+                    they take it, an owner lets you create repos there, and you move it in from here.</p>` : ''}
             </section>
             ${this._ask(m, 'change', 'Ask for a change', 'Also show the issues nobody answered in my organisation\'s repos.')}`;
     }
@@ -662,6 +673,29 @@ class ElfMaker extends LitElement {
             this._repos = undefined;
             this._done = `${m.repo} is public.`;
             this._load();
+        }
+    }
+
+    async _move(m) {
+        const r = await this._act('move', 'move', { make: m.id });
+        if (r?.repo) {
+            this._repos = undefined;
+            this._done = `It's ${r.repo} now.`;
+            this._load();
+        }
+    }
+
+    /** From its old place to House-elves: off the desk (its settings stay), then added from the new repo. */
+    async _switch(m, desk) {
+        this._busy = 'switch';
+        this._error = null;
+        try {
+            await elf.removeElf(desk.name);
+            await elf.addElf(m.repo);
+        } catch (err) {
+            if (!err.cancelled) this._error = err.message;
+        } finally {
+            this._busy = null;
         }
     }
 

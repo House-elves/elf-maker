@@ -9,7 +9,7 @@ Elf Maker is an elf like any other, and follows the guide in
 - **One file per elf in the making:** `makes/<id>.json`. Its `stage` moves through proposing, proposed, building,
   review and published (or failed). Each agent's id says which file it belongs to (`propose-<id>-<n>`,
   `build-<id>-<n>`), and `agent-done` takes its answer in.
-- **Nothing reaches GitHub without a click you confirm:** `create`, `publish`, `make-public` and `share` ask first. `published` only
+- **Nothing reaches GitHub without a click you confirm:** `create`, `publish`, `make-public`, `share` and `move` ask first. `published` only
   finishes a publish you confirmed: it checks the pushed commit is on GitHub before it tags the repo or makes it public.
   `make-public` makes a published private elf public only after the runner's check on it and a look through its
   whole history (every branch, tag and pull request ref) for tokens and keys (`Check.beforePublic`), since a public

@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -86,6 +87,7 @@ public class ElfMaker implements Callable<Integer> {
                 case "published" -> published(in);
                 case "share" -> share(in);
                 case "make-public" -> makePublic(in);
+                case "move" -> move(in);
                 case "adopt" -> adopt(in);
                 case "discard" -> discard(in);
                 case "settle" -> settle(in);
@@ -500,6 +502,54 @@ public class ElfMaker implements Callable<Integer> {
         return JSON.createObjectNode().put("make", m.path("id").asText()).put("repo", repo).put("public", true);
     }
 
+    static final Pattern SHARE_ISSUE = Pattern.compile("https://github\\.com/" + GitHub.ORG + "/house-elves/issues/(\\d+)");
+
+    /**
+     * Moves a public elf of yours into House-elves, when you may create repos there: GitHub moves it at once and
+     * forwards its old address. The request to share it, if you opened one, gets a note and is closed.
+     */
+    ObjectNode move(JsonNode in) throws IOException {
+        ObjectNode m = load(in.path("make").asText(""));
+        String repo = m.path("repo").asText("");
+        GitHub gh = new GitHub(login());
+        JsonNode r = repo.isEmpty() ? null : gh.repo(repo);
+        if (!m.path("stage").asText().equals("published") || r == null) throw new IllegalStateException("Publish it first");
+        if (repo.startsWith(GitHub.ORG + "/")) throw new IllegalStateException("It's in House-elves already");
+        String owner = repo.substring(0, repo.indexOf('/')), name = repo.substring(repo.indexOf('/') + 1);
+        if (!owner.equalsIgnoreCase(gh.login)) throw new IllegalStateException("It's in " + owner + "'s account: only they can move it");
+        if (r.path("private").asBoolean()) throw new IllegalStateException("It's private: make it public first");
+        if (!r.path("permissions").path("admin").asBoolean(false)) throw new IllegalStateException("Only an admin of " + repo + " can move it");
+        if (!gh.canShareInOrg()) throw new IllegalStateException("You can't create repos in House-elves: ask to share it instead, and an owner can let you");
+        String to = GitHub.ORG + "/" + name;
+        if (gh.repo(to) != null) throw new IllegalStateException("House-elves already has a repo called " + name);
+        gh.transfer(repo, GitHub.ORG);
+        // GitHub moves it at once for an org you may create repos in; it shows there a moment later.
+        for (int i = 0; i < 15 && gh.repo(to) == null; i++) {
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException(e);
+            }
+        }
+        if (gh.repo(to) == null) throw new IOException("GitHub is still moving it: look again in a minute");
+        m.put("repo", to).put("movedFrom", repo);
+        if (m.path("proposal") instanceof ObjectNode p) p.put("where", "house-elves");
+        log(m, "Moved it into House-elves: " + to);
+        Matcher issue = SHARE_ISSUE.matcher(m.path("shareIssue").asText(""));
+        if (issue.matches()) {
+            try {
+                gh.closeWith(GitHub.ORG + "/house-elves", Integer.parseInt(issue.group(1)),
+                        "Moved: it's https://github.com/" + to + " now.\n\n_By Elf Maker, on @" + gh.login + "'s click._");
+                log(m, "Closed the request to share it");
+            } catch (IOException e) {
+                log(m, "Couldn't close the request to share it: " + e.getMessage());
+            }
+        }
+        save(m);
+        return JSON.createObjectNode().put("make", m.path("id").asText()).put("repo", to).put("from", repo);
+    }
+
     /** Share: an issue in House-elves/house-elves asking for the elf to be shared there. */
     ObjectNode share(JsonNode in) throws IOException {
         ObjectNode m = load(in.path("make").asText(""));
@@ -523,8 +573,9 @@ public class ElfMaker implements Callable<Integer> {
         if (last.has("checked")) body.append("\nThe runner's check (`--check-elf`): ").append(last.path("checked").asBoolean() ? "passed" : "didn't pass").append(".\n");
         body.append("""
 
-                To take it: an owner of House-elves starts a transfer of the repo (Settings, Transfer ownership) and \
-                the author accepts it, or invites them to keep maintaining it there.
+                To take it: only the author can move their repo. An owner of House-elves lets them create repos \
+                there (a member, with members allowed to create public repos), and they click **Move it into \
+                House-elves** on the elf's page in Elf Maker. That closes this issue.
 
                 _Opened by Elf Maker on their click._""");
         String url = gh.issue(GitHub.ORG + "/house-elves", "Share an elf: " + p.path("title").asText() + " (" + repo + ")", body.toString());
