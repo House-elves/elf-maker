@@ -59,9 +59,10 @@ class ElfMaker extends LitElement {
         textarea, input[type=text], select { font-weight: 400; }
         textarea { resize: vertical; min-height: 5.5rem; line-height: 1.5; }
         textarea.tall { min-height: 12rem; }
-        label.field { display: grid; gap: 6px; font-size: 14px; font-weight: 500; }
+        /* Fields keep their own height, whatever the field beside them holds. */
+        label.field { display: grid; gap: 6px; font-size: 14px; font-weight: 500; align-content: start; }
         label.field .hint { font-weight: 400; }
-        .grid2 { display: grid; grid-template-columns: minmax(0, 14rem) minmax(0, 1fr); gap: 14px; }
+        .grid2 { display: grid; grid-template-columns: minmax(0, 18rem) minmax(0, 1fr); gap: 14px; align-items: start; }
         ul.makes { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
         ul.makes a { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 14px; padding: 14px 18px;
             color: var(--ink); text-decoration: none; }
@@ -334,7 +335,7 @@ class ElfMaker extends LitElement {
                 <div class="grid2">
                     <label class="field">Name
                         <input type="text" .value=${d.name ?? ''} @input=${e => this._set('name', e.target.value)} spellcheck="false">
-                        <span class="hint">Its repo's name too. Lowercase and -.</span>
+                        <span class="hint">Its repo's name too: lowercase letters, digits and dashes.</span>
                     </label>
                     <label class="field">Title
                         <input type="text" maxlength="30" .value=${d.title ?? ''} @input=${e => this._set('title', e.target.value)}>
