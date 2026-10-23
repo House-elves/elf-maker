@@ -95,7 +95,7 @@ actions:
     params:
       make: {pattern: "[0-9]{8}-[0-9]{6}"}
   make-public:
-    label: Make an elf public
+    label: Make it public
     confirm: Make this elf's repo public on GitHub? Anyone can then read its code and its history, and add it to their desk. Elf Maker checks it and its history for tokens and keys first.
     args: [--action=make-public]
     params:
