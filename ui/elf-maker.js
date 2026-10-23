@@ -45,13 +45,15 @@ class ElfMaker extends LitElement {
     };
 
     static styles = [shared, markdownStyles, css`
-        .page { display: grid; gap: 26px; }
+        /* One column that may be narrower than its content: a long line of code scrolls in its box instead of
+           widening the page. */
+        .page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; }
         h1 { font-size: 34px; line-height: 1.15; font-weight: 600; letter-spacing: -0.022em; }
         h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
         h3 { font-size: 15px; font-weight: 600; margin: 0; }
         .sub { margin: 6px 0 0; color: var(--muted); font-size: 14px; max-width: 46rem; }
-        section { display: grid; gap: 12px; }
-        .card { padding: 20px 22px; display: grid; gap: 14px; min-width: 0; }
+        section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+        .card { padding: 20px 22px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; }
         .hint { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 46rem; }
         .acts { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
         textarea, input[type=text], select {
