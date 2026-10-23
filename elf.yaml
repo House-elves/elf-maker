@@ -1,0 +1,126 @@
+# A House Elves elf: what Elf Desk needs to install, set up and run elf-maker. It comes with the desk (builtin): it
+# isn't on the + page, and the desk keeps it installed and updates it with itself.
+name: elf-maker
+title: Elf Maker
+version: 0.1.0
+author: "@phillip-kruger"
+description: Makes new elves from what you tell it, and changes them when you ask. You read and approve each version before it's published.
+main: ElfMaker.java
+config: ~/.config/elf-maker/config
+tools: [gh, git]
+builtin: true
+
+reads:
+  - What you ask it to make or change.
+  - When it works out a new elf, an agent (the runner's, in its sandbox, able only to read) reads the elf template and searches the web.
+  - When it builds or changes an elf, an agent (in the runner's sandbox, with no GitHub credentials) works in a clone of that elf's repo.
+writes:
+  - When you click Create and confirm, a new private repo on GitHub for the elf, in your account or in House-elves.
+  - When you click Publish and confirm, the version you read, pushed to that repo, and the repo made public if you chose that.
+  - When you click Share and confirm, an issue in House-elves/house-elves asking to share your elf.
+
+settings:
+  - key: GITHUB_USER
+    label: GitHub account
+    help: Whose repos new elves go in, and who they're by.
+    kind: login
+    default: ${github-user}
+
+commands:
+  dry-run:
+    label: Show what it knows
+    args: [--dry-run]
+
+dry-run: dry-run
+
+# Its page, drawn by ui/elf-maker.js in the desk's sandboxed frame. The desk opens it from the + page.
+tab:
+  page: ui/elf-maker.js
+data: [makes, agents]
+# The agents' reports are in ~/.config/elf-maker/agents; agent-done takes each one in when it ends.
+agents:
+  done: agent-done
+
+actions:
+  info:
+    label: Read your GitHub account
+    args: [--action=info]
+    ask: false
+  propose:
+    label: Work out a new elf
+    args: [--action=propose]
+    ask: false
+    params:
+      description: {max: 6000}
+      make: {pattern: "[0-9]{8}-[0-9]{6}", optional: true}
+      notes: {max: 6000, optional: true}
+  agent-done:
+    label: Take in an agent's answer
+    args: [--action=agent-done]
+    ask: false
+    params:
+      id: {pattern: "[a-z0-9][a-z0-9-]{0,79}"}
+  save:
+    label: Keep your changes to a proposal
+    args: [--action=save]
+    ask: false
+    params:
+      make: {pattern: "[0-9]{8}-[0-9]{6}"}
+      proposal: {max: 40000}
+  create:
+    label: Create the elf
+    confirm: Create a private repo on GitHub for this elf, and have an agent build it there? You read it before anything else is published.
+    args: [--action=create]
+    params:
+      make: {pattern: "[0-9]{8}-[0-9]{6}"}
+  revise:
+    label: Ask for a change
+    args: [--action=revise]
+    ask: false
+    params:
+      make: {pattern: "[0-9]{8}-[0-9]{6}"}
+      request: {max: 6000}
+  publish:
+    label: Publish this version
+    confirm: Publish the version you just read? It's pushed to the elf's repo on GitHub, and the repo is made public if you chose that.
+    args: [--action=publish]
+    params:
+      make: {pattern: "[0-9]{8}-[0-9]{6}"}
+      commit: {pattern: "[0-9a-f]{40}"}
+  published:
+    label: Finish publishing
+    args: [--action=published]
+    ask: false
+    params:
+      make: {pattern: "[0-9]{8}-[0-9]{6}"}
+  share:
+    label: Ask House Elves to share it
+    confirm: Open an issue in House-elves/house-elves asking for this elf to be shared there? The issue is public, with a link to the elf's repo.
+    args: [--action=share]
+    params:
+      make: {pattern: "[0-9]{8}-[0-9]{6}"}
+  adopt:
+    label: Change an elf you already have
+    args: [--action=adopt]
+    ask: false
+    params:
+      repo: {pattern: "[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}"}
+  recheck:
+    label: Check a version again
+    args: [--action=recheck]
+    ask: false
+    params:
+      make: {pattern: "[0-9]{8}-[0-9]{6}"}
+  settle:
+    label: Notice an agent that didn't start
+    args: [--action=settle]
+    ask: false
+    params:
+      make: {pattern: "[0-9]{8}-[0-9]{6}"}
+      why: {max: 500, optional: true}
+  discard:
+    label: Forget an elf in the making
+    args: [--action=discard]
+    ask: false
+    params:
+      make: {pattern: "[0-9]{8}-[0-9]{6}"}
