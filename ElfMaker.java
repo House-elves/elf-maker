@@ -266,7 +266,8 @@ public class ElfMaker implements Callable<Integer> {
                 posts or deletes is an action that asks first.
                 3. Its tab and card, in the desk's look and voice (AGENTS.md, How it reads): what it found, what needs \
                 them, and the clicks the proposal describes. An empty state says what to do first.
-                4. README.md in the template's shape: what it does, what it reads and writes, how to add it.
+                4. README.md in the template's shape: what it does, what it reads and writes, how to add it. \
+                CHANGES.md as AGENTS.md says, with one section, ## 0.1.0, saying what it does in plain words.
                 5. Check it: jbang https://github.com/House-elves/elf-runner/blob/main/ElfRunner.java --check-elf . \
                 until it has no problems (fix the warnings that apply). If there's no jbang here, compile it with javac \
                 against its //DEPS instead: Elf Maker runs the check on your commit when you're done. Try the dry run with a home of its own \
@@ -327,8 +328,11 @@ public class ElfMaker implements Callable<Integer> {
 
                 %s""".formatted(gh.login, afterPublish
                 ? "This is a new version of an elf people use: raise version in elf.yaml (the minor for something new, "
-                        + "the patch for a fix) and the picocli version with it."
-                : "It hasn't been published yet: keep version 0.1.0.", untrusted);
+                        + "the patch for a fix) and the picocli version with it, and add its section at the top of "
+                        + "CHANGES.md (create it if it's missing): what's new or fixed, in plain words for someone who "
+                        + "uses the elf and never reads its code, as AGENTS.md says."
+                : "It hasn't been published yet: keep version 0.1.0, and keep CHANGES.md's ## 0.1.0 section saying "
+                        + "what it does (create it if it's missing).", untrusted);
         ObjectNode agent = agent(agentId, m.path("repo").asText(), prompt, untrusted, Proposal.BUILD_SCHEMA);
         if (m.hasNonNull("session")) agent.put("session", m.path("session").asText());
         return JSON.createObjectNode().put("make", m.path("id").asText()).set("agent", agent);
