@@ -20,6 +20,46 @@ const STAGES = {
     review: ['Ready to read', 'warn'], published: ['Published', 'ok'], failed: ['Needs you', 'bad'],
 };
 const MAKE = /^\d{8}-\d{6}\.json$/;
+// Screenshots for a change: as many as the agent is shown, no bigger than Claude reads an image (1568 pixels on the
+// long side), about 450 KB at most. Each goes to Elf Maker in parts: the desk takes up to 64 KB at a time.
+const MAX_SHOTS = 4;
+const MAX_SIDE = 1568;
+const MAX_CHARS = 600_000;
+const PART = 60_000;
+
+/** An image file as a data URL that fits: PNG if it's small enough (sharpest for text), else WebP or JPEG, smaller. */
+async function fit(file) {
+    const bitmap = await createImageBitmap(file);
+    let scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+    for (let tries = 0; tries < 8; tries++, scale *= 0.75) {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        const g = canvas.getContext('2d');
+        g.fillStyle = '#fff'; // what's transparent, on white (JPEG has no transparency)
+        g.fillRect(0, 0, canvas.width, canvas.height);
+        g.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        for (const [type, quality] of [['image/png'], ['image/webp', 0.92], ['image/webp', 0.8], ['image/jpeg', 0.85]]) {
+            const url = canvas.toDataURL(type, quality);
+            // A browser that can't write the type gives a PNG instead.
+            if (url.startsWith(`data:${type};`) && url.length <= MAX_CHARS) return url;
+        }
+    }
+    throw new Error('That image is too big to send.');
+}
+
+/** A screenshot (a data URL) kept by Elf Maker for the change: sent in parts, answers its id. */
+async function attach(make, url) {
+    let shot;
+    for (let at = 0; at < url.length; at += PART) {
+        const done = at + PART >= url.length;
+        const r = await elf.act('attach', { make, ...(shot ? { shot } : {}), data: url.slice(at, at + PART), done });
+        shot = r.id;
+    }
+    return shot;
+}
+
+let shotKeys = 0;
 
 const titleOf = m => m.proposal?.title || (m.description ?? '').split(/\s+/).slice(0, 6).join(' ') || 'New elf';
 const linesOf = text => (text ?? '').split('\n').map(l => l.trim()).filter(Boolean);
@@ -41,6 +81,7 @@ class ElfMaker extends LitElement {
         _done: { state: true },        // what just happened, for the line under the buttons
         _discarding: { state: true },
         _repos: { state: true },
+        _shots: { state: true },       // screenshots for the change you're writing: [{key, url, id, error}]
         _installed: { state: true },   // the elves on this desk: [{name, title, repo, commit, version}]       // the elf repos you can push to (undefined: loading, null: failed)
     };
 
@@ -110,6 +151,11 @@ class ElfMaker extends LitElement {
         .confirm { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 14px; padding: 10px 12px;
             border-radius: var(--r-control); background: var(--surface-2); }
         .done { color: var(--ok); font-size: 14px; margin: 0; }
+        ul.shots { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 12px; }
+        ul.shots li { display: grid; gap: 6px; justify-items: start; width: 10rem; }
+        ul.shots img { width: 10rem; height: 6.5rem; object-fit: cover; object-position: top left; border-radius: var(--r-control);
+            border: 1px solid var(--line); background: var(--surface-2); }
+        ul.shots .hint { display: inline-flex; gap: 6px; align-items: center; }
         @media (max-width: 760px) {
             .grid2, .setting { grid-template-columns: minmax(0, 1fr); }
             h1 { font-size: 27px; }
@@ -120,6 +166,7 @@ class ElfMaker extends LitElement {
         super();
         new Ticking(this);
         this._route = elf.route();
+        this._shots = [];
     }
 
     connectedCallback() {
@@ -139,6 +186,7 @@ class ElfMaker extends LitElement {
         this._done = null;
         this._error = null;
         this._discarding = false;
+        this._clearShots();
         this._load();
         this._arrive();
     }
@@ -540,21 +588,67 @@ class ElfMaker extends LitElement {
             this._error = 'Say what to change.';
             return;
         }
-        const r = await this._act('revise', 'revise', { make: m.id, request });
+        if (this._shots.some(s => !s.id && !s.error)) {
+            this._error = 'A screenshot is still on its way: wait a moment.';
+            return;
+        }
+        const images = this._shots.filter(s => s.id).map(s => s.id).join(',');
+        const r = await this._act('revise', 'revise', { make: m.id, request, ...(images ? { images } : {}) });
         if (r) {
             field.value = '';
+            this._clearShots();
             this._load();
         }
+    }
+
+    /** Screenshots pasted or dropped into the request: each kept by Elf Maker until the request is sent. */
+    _takeShots(e, m) {
+        const files = [...(e.clipboardData ?? e.dataTransfer ?? e.target)?.files ?? []].filter(f => f.type.startsWith('image/'));
+        if (!files.length) return; // text: the field takes it
+        e.preventDefault();
+        if (e.target.type === 'file') e.target.value = '';
+        for (const file of files) {
+            if (this._shots.length >= MAX_SHOTS) {
+                this._error = `A change takes at most ${MAX_SHOTS} screenshots.`;
+                return;
+            }
+            const shot = { key: ++shotKeys, url: URL.createObjectURL(file), id: null, error: null };
+            this._shots = [...this._shots, shot];
+            fit(file).then(image => attach(m.id, image)).then(id => { shot.id = id; },
+                err => { shot.error = err.message; }).finally(() => { this._shots = [...this._shots]; });
+        }
+    }
+
+    _dropShot(shot) {
+        URL.revokeObjectURL(shot.url);
+        this._shots = this._shots.filter(s => s !== shot);
+    }
+
+    _clearShots() {
+        this._shots?.forEach(s => URL.revokeObjectURL(s.url));
+        this._shots = [];
     }
 
     _ask(m, id, label, placeholder) {
         return html`<section class="panel card" aria-labelledby="${id}-h">
             <h2 id="${id}-h">${label}</h2>
             <label class="field">What should change?
-                <textarea id=${id} placeholder=${placeholder}></textarea>
+                <textarea id=${id} placeholder=${placeholder} @paste=${e => this._takeShots(e, m)}
+                    @dragover=${e => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); }}
+                    @drop=${e => this._takeShots(e, m)}></textarea>
+                <span class="hint">To show what you mean, paste a screenshot here (or drop one), up to ${MAX_SHOTS}.</span>
             </label>
-            <div class="acts"><button ?disabled=${!!this._busy} @click=${() => this._revise(m, id)}>
+            <input type="file" id="${id}-shot" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden
+                @change=${e => this._takeShots(e, m)}>
+            ${this._shots.length ? html`<ul class="shots" aria-label="Screenshots">${this._shots.map((s, i) => html`<li>
+                <img src=${s.url} alt="Screenshot ${i + 1}">
+                <span class="hint">${s.error ? html`<span class="check-bad">${s.error}</span>` : s.id ? `Screenshot ${i + 1}` : html`${spinner}Adding…`}</span>
+                <button class="sm quiet" aria-label="Remove screenshot ${i + 1}" @click=${() => this._dropShot(s)}>Remove</button>
+            </li>`)}</ul>` : ''}
+            <div class="acts"><button ?disabled=${!!this._busy || this._shots.some(s => !s.id && !s.error)} @click=${() => this._revise(m, id)}>
                 ${this._busy === 'revise' ? spinner : ''}Ask for the change</button>
+                <button class="quiet" ?disabled=${this._shots.length >= MAX_SHOTS}
+                    @click=${() => this.renderRoot.querySelector(`#${id}-shot`).click()}>Add a screenshot</button>
                 <span class="hint">The agent changes it in its clone, and you read it again before it's published.</span></div>
         </section>`;
     }

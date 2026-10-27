@@ -17,6 +17,8 @@ desk's **+** page.
    Publish it's pushed, tagged `house-elf`, made public if you chose that, and the desk offers to add it.
 5. **Change it any time.** Ask for a change and the agent makes a new version, which you read and publish the same way.
    Your desk then offers it as an update. **Change an elf you already have** works for any elf repo you can push to.
+   To show what you mean, paste screenshots into your request (up to 4): the agent sees them with your words, after
+   the runner's safety check reads them too. Each stays on your machine until you send the request.
 
 A private elf can be made public later: **Make it public** on its page checks it and its whole history for tokens
 and keys, then makes its repo public, so anyone can read it and add it. A public elf in your account can be shared:

@@ -2,7 +2,7 @@
 # isn't on the + page, and the desk keeps it installed and updates it with itself.
 name: elf-maker
 title: Elf Maker
-version: 0.1.0
+version: 0.2.0
 author: "@phillip-kruger"
 description: Makes new elves from what you tell it, and changes them when you ask. You read and approve each version before it's published.
 main: ElfMaker.java
@@ -11,7 +11,7 @@ tools: [gh, git]
 builtin: true
 
 reads:
-  - What you ask it to make or change.
+  - What you ask it to make or change, and the screenshots you paste into a request for a change (kept here until you send it).
   - When it works out a new elf, an agent (the runner's, in its sandbox, able only to read) reads the elf template and searches the web.
   - When it builds or changes an elf, an agent (in the runner's sandbox, with no GitHub credentials) works in a clone of that elf's repo.
 writes:
@@ -75,6 +75,15 @@ actions:
     args: [--action=create]
     params:
       make: {pattern: "[0-9]{8}-[0-9]{6}"}
+  attach:
+    label: Keep a screenshot for a change
+    args: [--action=attach]
+    ask: false
+    params:
+      make: {pattern: "[0-9]{8}-[0-9]{6}"}
+      shot: {pattern: "[0-9a-f]{16}", optional: true}
+      data: {max: 60000, pattern: "(data:image/(png|jpeg|gif|webp);base64,)?[A-Za-z0-9+/=]*"}
+      done: {kind: bool}
   revise:
     label: Ask for a change
     args: [--action=revise]
@@ -82,6 +91,7 @@ actions:
     params:
       make: {pattern: "[0-9]{8}-[0-9]{6}"}
       request: {max: 6000}
+      images: {pattern: "[0-9a-f]{16}(,[0-9a-f]{16}){0,3}", optional: true}
   publish:
     label: Publish this version
     confirm: Publish the version you just read? It's pushed to the elf's repo on GitHub, and the repo is made public if you chose that.
