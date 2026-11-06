@@ -53,7 +53,7 @@ import java.util.regex.Pattern;
  *
  * Nothing goes to GitHub but on a click you confirm: Create, Publish, Share.
  */
-@Command(name = "elf-maker", mixinStandardHelpOptions = true, version = "0.2.0", description = "Makes and changes elves for Elf Desk")
+@Command(name = "elf-maker", mixinStandardHelpOptions = true, version = "0.3.0", description = "Makes and changes elves for Elf Desk")
 public class ElfMaker implements Callable<Integer> {
 
     static final ObjectMapper JSON = new ObjectMapper();

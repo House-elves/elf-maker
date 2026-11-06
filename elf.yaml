@@ -2,7 +2,7 @@
 # isn't on the + page, and the desk keeps it installed and updates it with itself.
 name: elf-maker
 title: Elf Maker
-version: 0.2.0
+version: 0.3.0
 author: "@phillip-kruger"
 description: Makes new elves from what you tell it, and changes them when you ask. You read and approve each version before it's published.
 main: ElfMaker.java

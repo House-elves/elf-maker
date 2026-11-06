@@ -5,6 +5,11 @@ update.
 
 Elf Maker comes with the desk and updates with it, so its changes arrive with a desk update.
 
+## 0.3.0
+
+- New: voice input. 🎤 next to "What should it do?" and the change requests: describe the elf out loud, and the words go in at the cursor. The desk listens, with your browser's speech recognition or Whisper on its
+  machine. Needs Elf Desk 0.6.42.
+
 ## 0.2.0
 
 - Paste a screenshot when you ask for a change: up to 4, pasted or dropped into "What should change?". The agent sees them with your words.

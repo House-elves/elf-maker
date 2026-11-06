@@ -308,7 +308,7 @@ class ElfMaker extends LitElement {
             <section class="panel card" aria-labelledby="new-h">
                 <h2 id="new-h">What should it do?</h2>
                 <label class="field"><span class="hint">Describe the job in your own words: what it reads, when, and what you want to see.</span>
-                    <textarea id="describe" class="tall" aria-label="What should it do?" placeholder="Every weekday morning, list the new issues in my repos that nobody has answered yet, oldest first, with a link to each."></textarea>
+                    <textarea id="describe" class="tall" aria-label="What should it do?" placeholder="Every weekday morning, list the new issues in my repos that nobody has answered yet, oldest first, with a link to each."></textarea><elf-mic></elf-mic>
                 </label>
                 <div class="acts">
                     <button class="primary" ?disabled=${!!this._busy} @click=${this._propose}>
@@ -476,7 +476,7 @@ class ElfMaker extends LitElement {
                     <textarea maxlength="300" style="min-height:3.5rem" .value=${d.description ?? ''} @input=${e => this._set('description', e.target.value)}></textarea>
                 </label>
                 <label class="field">How it will work
-                    <textarea class="tall" .value=${d.how ?? ''} @input=${e => this._set('how', e.target.value)}></textarea>
+                    <textarea class="tall" .value=${d.how ?? ''} @input=${e => this._set('how', e.target.value)}></textarea><elf-mic></elf-mic>
                     <span class="hint">This is what the agent builds from. Markdown.</span>
                 </label>
             </section>
@@ -546,7 +546,7 @@ class ElfMaker extends LitElement {
                 <summary>Work it out again</summary>
                 <div class="card" style="padding:12px 0 0">
                     <label class="field">What should change?
-                        <textarea id="notes" placeholder="It should also cover my organisation's repos, and run at 8."></textarea>
+                        <textarea id="notes" placeholder="It should also cover my organisation's repos, and run at 8."></textarea><elf-mic></elf-mic>
                     </label>
                     <div class="acts"><button ?disabled=${!!this._busy} @click=${() => this._rework(m)}>
                         ${this._busy === 'rework' ? spinner : ''}Work it out again</button>
@@ -635,7 +635,7 @@ class ElfMaker extends LitElement {
             <label class="field">What should change?
                 <textarea id=${id} placeholder=${placeholder} @paste=${e => this._takeShots(e, m)}
                     @dragover=${e => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); }}
-                    @drop=${e => this._takeShots(e, m)}></textarea>
+                    @drop=${e => this._takeShots(e, m)}></textarea><elf-mic></elf-mic>
                 <span class="hint">To show what you mean, paste a screenshot here (or drop one), up to ${MAX_SHOTS}.</span>
             </label>
             <input type="file" id="${id}-shot" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden
